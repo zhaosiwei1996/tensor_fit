@@ -75,7 +75,7 @@ if __name__ == '__main__':
     labels = []
     strftime = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     # fit
-    epochs = sys.argv[1]
+    epochs = int(sys.argv[1])
     # batchsize
     batch_size = 4096
     # dropout
