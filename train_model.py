@@ -79,7 +79,7 @@ if __name__ == '__main__':
     # batchsize
     batch_size = 4096
     # dropout
-    dropout = 0.5
+    dropout = 0.2
     # kernel_size
     kernel_size = 11
     npyfilepath = '/Users/wubo/Downloads/zhaosiwei/npyfiles/'
