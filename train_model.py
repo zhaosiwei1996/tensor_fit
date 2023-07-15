@@ -35,7 +35,6 @@ def modelcreate():
         Dropout(dropout),
 
         Flatten(),
-        Dropout(dropout),
 
         Dense(128),
         LeakyReLU(alpha=0.3),
@@ -46,7 +45,7 @@ def modelcreate():
         Dropout(dropout),
 
         Dense(units=len(label_encoder.classes_), activation='softmax'),
-        # Dropout(0.3),
+        Dropout(dropout),
     ])
     model.summary()
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
