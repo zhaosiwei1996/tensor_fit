@@ -46,6 +46,7 @@ def modelcreate():
         Dropout(dropout),
 
         Dense(units=len(label_encoder.classes_), activation='softmax'),
+        Dropout(0.3),
     ])
     model.summary()
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
