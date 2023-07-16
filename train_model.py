@@ -60,7 +60,7 @@ def modelfit():
                         validation_data=(features_test, label_encoder.fit_transform(labels_test)),
                         callbacks=[callbacks.History(), tensorboard_callback])
 
-    model.save(modelpath)
+    model.save(modelpath, save_format='h5')
     loss, accuracy = model.evaluate(features_test, label_encoder.fit_transform(labels_test))
     endtime = BaseUtils.get_timestamp()
     logging.info('Test Accuracy: %f' % (accuracy * 100))
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     kernel_size = 11
     npyfilepath = '/Users/wubo/Downloads/zhaosiwei/npyfiles/'
     fitlogspath = '/Users/wubo/Downloads/zhaosiwei/logs/fit/'
-    modelpath = '/Users/wubo/Downloads/zhaosiwei/sign-language-model/sign-language-{}.h5'.format(strftime)
+    modelpath = '/Users/wubo/Downloads/zhaosiwei/sign-language-model/sign-language_{}.h5'.format(strftime)
     # data
     label_data_dict = {
         'before': np.load(f'{npyfilepath}before.npy', allow_pickle=True),
