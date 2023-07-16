@@ -84,7 +84,7 @@ if __name__ == '__main__':
     kernel_size = 11
     npyfilepath = '/Users/wubo/Downloads/zhaosiwei/npyfiles/'
     fitlogspath = '/Users/wubo/Downloads/zhaosiwei/logs/fit/'
-    modelpath = '/Users/wubo/Downloads/zhaosiwei/sign-language-model.h5_{}'.format(strftime)
+    modelpath = '/Users/wubo/Downloads/zhaosiwei/sign-language-model/sign-language-{}.h5'.format(strftime)
     # data
     label_data_dict = {
         'before': np.load(f'{npyfilepath}before.npy', allow_pickle=True),
