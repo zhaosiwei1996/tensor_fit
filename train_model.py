@@ -63,9 +63,9 @@ def modelfit():
     model.save(modelpath, save_format='h5')
     loss, accuracy = model.evaluate(features_test, label_encoder.fit_transform(labels_test))
     endtime = BaseUtils.get_timestamp()
-    logging.info('Test Accuracy: %f' % (accuracy * 100))
-    logging.info('Test loss: %f' % (loss * 100))
-    logging.info(f'fix totaltime:{str(endtime - starttime)}')
+    print('Test Accuracy: %f' % (accuracy * 100))
+    print('Test loss: %f' % (loss * 100))
+    print(f'fix totaltime:{str(endtime - starttime)}')
 
 
 if __name__ == '__main__':
