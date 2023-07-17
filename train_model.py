@@ -17,6 +17,7 @@ logger.setLevel(logging.DEBUG)
 label_encoder = LabelEncoder()
 
 
+# create train model
 def modelcreate():
     model = Sequential([
         Conv1D(256, kernel_size, padding='same', input_shape=(data.shape[1], data.shape[2])),
@@ -52,6 +53,7 @@ def modelcreate():
     return model
 
 
+# model fit and save
 def modelfit():
     model = modelcreate()
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fitlogspath + strftime, histogram_freq=1)
