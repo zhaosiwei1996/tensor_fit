@@ -24,29 +24,23 @@ def modelcreate():
         LeakyReLU(alpha=0.3),
         MaxPooling1D(2, padding='same'),
         Dropout(dropout),
-
         Conv1D(128, kernel_size, padding='same'),
         LeakyReLU(alpha=0.3),
         MaxPooling1D(2, padding='same'),
         Dropout(dropout),
-
         Conv1D(64, kernel_size, padding='same'),
         LeakyReLU(alpha=0.3),
         MaxPooling1D(2, padding='same'),
         Dropout(dropout),
-
         Flatten(),
-
         Dense(128),
         LeakyReLU(alpha=0.3),
         Dropout(dropout),
-
         Dense(64),
         LeakyReLU(alpha=0.3),
         Dropout(dropout),
-
         Dense(units=len(label_encoder.classes_), activation='softmax'),
-        Dropout(dropout),
+        # Dropout(dropout),
     ])
     model.summary()
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
@@ -84,6 +78,7 @@ if __name__ == '__main__':
     dropout = 0.2
     # kernel_size
     kernel_size = 11
+    model = modelcreate()
     npyfilepath = '/Users/wubo/Downloads/zhaosiwei/npyfiles/'
     fitlogspath = '/Users/wubo/Downloads/zhaosiwei/logs/fit/'
     modelpath = '/Users/wubo/Downloads/zhaosiwei/sign-language-model/sign-language_{}.h5'.format(strftime)
