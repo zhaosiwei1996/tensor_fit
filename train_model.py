@@ -1,71 +1,176 @@
 #!/usr/bin/env python
 # coding:utf8
-from tensorflow.keras import callbacks
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, LeakyReLU
+from tensorflow.keras.metrics import Precision, Recall
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, History
+from tensorflow.keras.utils import to_categorical, plot_model
+from collections import Counter
+from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
-from utils import *
+import matplotlib.pyplot as plt
+import pickle
 import numpy as np
-import tensorflow as tf
+import seaborn as sns
 import logging
 import datetime
 import sys
+import time
+import os
 
 logger = tf.get_logger()
 logger.setLevel(logging.DEBUG)
-label_encoder = LabelEncoder()
 
 
 # create train model
 def modelcreate():
     model = Sequential([
-        Conv1D(256, kernel_size, padding='same', input_shape=(data.shape[1], data.shape[2])),
-        LeakyReLU(alpha=0.3),
-        MaxPooling1D(2, padding='same'),
+        Conv1D(128, kernel_size, padding='same', input_shape=(data.shape[1], data.shape[2])),
+        LeakyReLU(alpha=alpha),
+        MaxPooling1D(4, padding='same'),
         Dropout(dropout),
-        Conv1D(128, kernel_size, padding='same'),
-        LeakyReLU(alpha=0.3),
-        MaxPooling1D(2, padding='same'),
-        Dropout(dropout),
+
         Conv1D(64, kernel_size, padding='same'),
-        LeakyReLU(alpha=0.3),
-        MaxPooling1D(2, padding='same'),
+        LeakyReLU(alpha=alpha),
+        MaxPooling1D(4, padding='same'),
         Dropout(dropout),
+        # Conv1D(32, kernel_size, padding='same'),
+        # LeakyReLU(alpha=alpha),
+        # MaxPooling1D(2, padding='same'),
+        # Dropout(dropout),
+
         Flatten(),
         Dense(128),
-        LeakyReLU(alpha=0.3),
+        LeakyReLU(alpha=alpha),
         Dropout(dropout),
         Dense(64),
-        LeakyReLU(alpha=0.3),
+        LeakyReLU(alpha=alpha),
         Dropout(dropout),
-        Dense(units=len(label_encoder.classes_), activation='softmax'),
-        # Dropout(dropout),
+        Dense(units=labels_train.shape[1], activation='softmax'),
     ])
     model.summary()
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.compile(optimizer='adam',
+                  loss='categorical_crossentropy',
+                  metrics=['accuracy', Precision(), Recall()])
     return model
 
 
 # model fit and save
 def modelfit():
     model = modelcreate()
+    # tensorflow实时日志
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fitlogspath + strftime, histogram_freq=1)
-    starttime = BaseUtils.get_timestamp()
-    history = model.fit(features_train, encoded_labels, epochs=epochs, batch_size=batch_size,
-                        validation_data=(features_test, label_encoder.fit_transform(labels_test)),
-                        callbacks=[callbacks.History(), tensorboard_callback])
 
-    model.save(modelpath, save_format='h5')
-    loss, accuracy = model.evaluate(features_test, label_encoder.fit_transform(labels_test))
-    endtime = BaseUtils.get_timestamp()
-    print('Test Accuracy: %f' % (accuracy * 100))
-    print('Test loss: %f' % (loss * 100))
-    print(f'fix totaltime:{str(endtime - starttime)}')
+    # 早停回调
+    early_stopping = EarlyStopping(monitor='val_loss', patience=15, verbose=1)
+    model_checkpoint = ModelCheckpoint(bestmodelfile, monitor='val_loss', save_best_only=True, verbose=1)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, verbose=1)
+
+    starttime = int(time.time())
+    # 训练模型
+    history = model.fit(features_train, labels_train, epochs=epochs, batch_size=batch_size, validation_split=0.2,
+                        validation_data=(features_test, labels_test),
+                        callbacks=[tensorboard_callback, early_stopping, model_checkpoint,
+                                   reduce_lr])
+    model.load_weights(bestmodelfile)
+    endtime = int(time.time())
+    model.save(modelfilename, save_format='h5')
+
+    # 从history对象中提取训练和验证的指标
+    accuracy = history.history['val_accuracy'][-1]  # 取验证集上最后一个epoch的准确率
+    loss = history.history['val_loss'][-1]  # 取验证集上最后一个epoch的丢失率
+    precision = history.history['val_precision'][-1]  # 取验证集上最后一个epoch的精确率
+    recall = history.history['val_recall'][-1]  # 取验证集上最后一个epoch的召回率
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) != 0 else 0  # 计算F1分数
+    # 输出指标
+    print(f'最后一次迭代准确率: {accuracy:.4f}')
+    print(f'最后一次迭代丢失率: {loss:.4f}')
+    print(f'最后一次迭代精确率: {precision:.4f}')
+    print(f'最后一次迭代召回率: {recall:.4f}')
+    print(f'F1 分数: {f1:.4f}')
+    loss, accuracy, precision, recall = model.evaluate(features_test, labels_test)
+    # 20%模型测试
+    print('20%%准确率测试: %f' % (accuracy * 100))
+    print('20%%丢失率测试: %f' % (loss * 100))
+    print('20%%精确度测试: %f' % (precision * 100))
+    print('20%%召回率测试: %f' % (recall * 100))
+    print(f'训练总时间:{str(endtime - starttime)}秒')
+    plt.rcParams.update({'font.size': 15})
+    plt.figure(figsize=(14, 6))
+
+    # 左侧图（准确度）：y 轴 0.1 - 0.9
+    plt.subplot(1, 2, 1)
+    plt.plot(history.history['accuracy'], label='Training Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+    plt.title('Model Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy')
+    plt.yticks(np.arange(0.1, 1.0, 0.1))  # 0.1 到 0.9
+    plt.ylim(0.05, 0.95)  # **扩大范围，避免超出**
+    plt.legend()
+
+    # 右侧图（损失）：y 轴从 max_loss 到 0.x
+    plt.subplot(1, 2, 2)
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.title('Model Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+
+    # 计算损失范围（动态调整上下限，避免超出）
+    min_loss = min(min(history.history['loss']), min(history.history['val_loss']))
+    max_loss = max(max(history.history['loss']), max(history.history['val_loss']))
+
+    buffer = 0.1 * (max_loss - min_loss)  # **增加额外空间，避免超出**
+    plt.ylim(min_loss - buffer, max_loss + buffer)  # 扩展范围
+
+    # 生成 6 个等间距的小数刻度，并保留 2 位小数
+    loss_ticks = np.linspace(min_loss, max_loss, num=6)
+    plt.yticks(loss_ticks, [f"{tick:.2f}" for tick in loss_ticks])  # **格式化刻度**
+
+    plt.legend()
+
+    plt.savefig('../sign-language-translate/test/sign-language.png')
+    plt.show()
+
+    # 预测
+    y_pred = model.predict(features_test)
+    y_pred_classes = y_pred.argmax(axis=1)
+    y_true = labels_test.argmax(axis=1)
+    # 获取标签名称
+    target_names = encoder.classes_
+    # 分类报告
+    report = classification_report(y_true, y_pred_classes, target_names=target_names, output_dict=True)
+    print(classification_report(y_true, y_pred_classes, target_names=target_names))
+    # 混淆矩阵
+    conf_matrix = confusion_matrix(y_true, y_pred_classes)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues', xticklabels=target_names, yticklabels=target_names)
+    plt.xlabel('Predicted')
+    plt.ylabel('True')
+    plt.title('Confusion Matrix')
+    plt.savefig('../sign-language-translate/test/confusion_matrix.png')
+    plt.show()
+    # 绘制模型结构图
+    plot_model(model, to_file='../sign-language-translate/test/model_structure.png', show_shapes=True,
+               show_layer_names=True, dpi=300)
 
 
 if __name__ == '__main__':
-    # tf.config.set_visible_devices(tf.config.list_physical_devices("CPU"))
+    tf.keras.backend.clear_session()
+    config = tf.compat.v1.ConfigProto()
+    config.gpu_options.allow_growth = True
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if gpus:
+        try:
+            for gpu in gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+        except RuntimeError as e:
+            print(e)
+
+    # tf.config.set_visible_devices(tf.config.list_physical_devices("GPU"))
     # print(tf.config.list_logical_devices())
     data = []
     labels = []
@@ -73,31 +178,53 @@ if __name__ == '__main__':
     # fit
     epochs = int(sys.argv[1])
     # batchsize
-    batch_size = 4096
+    batch_size = 32768
+    # LeakyReLU
+    alpha = 0.2
     # dropout
-    dropout = 0.2
+    dropout = 0.1
     # kernel_size
-    kernel_size = 11
-    model = modelcreate()
-    npyfilepath = '/Users/wubo/Downloads/zhaosiwei/npyfiles/'
-    fitlogspath = '/Users/wubo/Downloads/zhaosiwei/logs/fit/'
-    modelpath = '/Users/wubo/Downloads/zhaosiwei/sign-language-model/sign-language_{}.h5'.format(strftime)
+    kernel_size = 3
+    bestmodelfile = './best_model.keras'
+    modelfilename = '../sign-language-translate/test/sign-language.h5'
+    tfjs_target_dir = '../sign-language-translate/test/sign-language'
+    pltpng = '../sign-language-translate/test/sign-language.png'
+    npyfilespath = './npyfiles2025/'
+    fitlogspath = './logs/fit/'
     # data
-    label_data_dict = {
-        'before': np.load(f'{npyfilepath}before.npy', allow_pickle=True),
-        'book': np.load(f'{npyfilepath}book.npy', allow_pickle=True),
-        'chair': np.load(f'{npyfilepath}chair.npy', allow_pickle=True),
-        'computer': np.load(f'{npyfilepath}computer.npy', allow_pickle=True),
-        'drink': np.load(f'{npyfilepath}drink.npy', allow_pickle=True),
-        'go': np.load(f'{npyfilepath}go.npy', allow_pickle=True)
-    }
+    # 初始化字典来存储数据
+    label_data_dict = {}
+    for filename in os.listdir(npyfilespath):
+        if filename.endswith('.npy'):  # 确保只处理.npy文件
+            # 提取不包含扩展名的文件名作为键
+            word = filename[:-4]
+            # 加载.npy文件并将数据存储到字典中
+            label_data_dict[word] = np.load(os.path.join(npyfilespath, filename), allow_pickle=True)
+    # 创建标签映射字典
+    label_map = {i: label for i, label in enumerate(label_data_dict)}
+    print(label_map)
+    # 保存标签映射到文件
+    with open('../sign-language-translate/test/sign-language.pkl', 'wb') as f:
+        pickle.dump(label_map, f)
+
     for label, arr in label_data_dict.items():
         data.extend(arr)
         labels.extend([label] * len(arr))
+        # print(f"Label '{label}' corresponds to {arr.shape[0]} rows.")
     data = np.array(data, dtype=np.float32)
     labels = np.array(labels)
-    print(data.shape)
-    features_train, features_test, labels_train, labels_test = train_test_split(data, labels, test_size=0.2,
+    # 使用Counter来计算每个标签的出现次数
+    label_counts = Counter(labels)
+    # 打印每个标签及其数量
+    for label, count in label_counts.items():
+        print(f"Label '{label}' appears {count} samples.")
+    # 可选：打印总的标签数量
+    print("Total number of samples:", len(labels))
+    print("Total number of label:", len(label_counts))
+    # 标签编码
+    encoder = LabelEncoder()
+    encoded_labels = to_categorical(encoder.fit_transform(labels))
+    features_train, features_test, labels_train, labels_test = train_test_split(data, encoded_labels, test_size=0.2,
                                                                                 random_state=42)
-    encoded_labels = label_encoder.fit_transform(labels_train)
+    # modelcreate()
     modelfit()
