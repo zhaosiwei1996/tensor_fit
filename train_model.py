@@ -1,24 +1,24 @@
 #!/usr/bin/env python
 # coding:utf8
-from tensorflow.keras import callbacks
+import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Conv1D, MaxPooling1D, Flatten, Dense, Dropout, LeakyReLU
 from tensorflow.keras.metrics import Precision, Recall
-from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau, History
 from tensorflow.keras.utils import to_categorical, plot_model
 from collections import Counter
 from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
-from utils import *
 import matplotlib.pyplot as plt
 import pickle
 import numpy as np
-import tensorflow as tf
 import seaborn as sns
 import logging
 import datetime
 import sys
+import time
+import os
 
 logger = tf.get_logger()
 logger.setLevel(logging.DEBUG)
@@ -40,6 +40,7 @@ def modelcreate():
         # LeakyReLU(alpha=alpha),
         # MaxPooling1D(2, padding='same'),
         # Dropout(dropout),
+
         Flatten(),
         Dense(128),
         LeakyReLU(alpha=alpha),
@@ -62,19 +63,19 @@ def modelfit():
     # tensorflow实时日志
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fitlogspath + strftime, histogram_freq=1)
 
-    # 定义回调函数
-    early_stopping = EarlyStopping(monitor='val_loss', patience=20, verbose=1)
+    # 早停回调
+    early_stopping = EarlyStopping(monitor='val_loss', patience=15, verbose=1)
     model_checkpoint = ModelCheckpoint(bestmodelfile, monitor='val_loss', save_best_only=True, verbose=1)
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.1, patience=5, verbose=1)
 
-    starttime = BaseUtils.get_timestamp()
+    starttime = int(time.time())
     # 训练模型
     history = model.fit(features_train, labels_train, epochs=epochs, batch_size=batch_size, validation_split=0.2,
                         validation_data=(features_test, labels_test),
-                        callbacks=[callbacks.History(), tensorboard_callback, early_stopping, model_checkpoint,
+                        callbacks=[tensorboard_callback, early_stopping, model_checkpoint,
                                    reduce_lr])
     model.load_weights(bestmodelfile)
-    endtime = BaseUtils.get_timestamp()
+    endtime = int(time.time())
     model.save(modelfilename, save_format='h5')
 
     # 从history对象中提取训练和验证的指标
@@ -95,26 +96,40 @@ def modelfit():
     print('20%%丢失率测试: %f' % (loss * 100))
     print('20%%精确度测试: %f' % (precision * 100))
     print('20%%召回率测试: %f' % (recall * 100))
-    print(f'训练总时间:{str(endtime - starttime)}')
-
+    print(f'训练总时间:{str(endtime - starttime)}秒')
     plt.rcParams.update({'font.size': 15})
-    # 绘制训练和验证的准确度以及损失
     plt.figure(figsize=(14, 6))
 
+    # 左侧图（准确度）：y 轴 0.1 - 0.9
     plt.subplot(1, 2, 1)
     plt.plot(history.history['accuracy'], label='Training Accuracy')
     plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
     plt.title('Model Accuracy')
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
+    plt.yticks(np.arange(0.1, 1.0, 0.1))  # 0.1 到 0.9
+    plt.ylim(0.05, 0.95)  # **扩大范围，避免超出**
     plt.legend()
 
+    # 右侧图（损失）：y 轴从 max_loss 到 0.x
     plt.subplot(1, 2, 2)
     plt.plot(history.history['loss'], label='Training Loss')
     plt.plot(history.history['val_loss'], label='Validation Loss')
     plt.title('Model Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
+
+    # 计算损失范围（动态调整上下限，避免超出）
+    min_loss = min(min(history.history['loss']), min(history.history['val_loss']))
+    max_loss = max(max(history.history['loss']), max(history.history['val_loss']))
+
+    buffer = 0.1 * (max_loss - min_loss)  # **增加额外空间，避免超出**
+    plt.ylim(min_loss - buffer, max_loss + buffer)  # 扩展范围
+
+    # 生成 6 个等间距的小数刻度，并保留 2 位小数
+    loss_ticks = np.linspace(min_loss, max_loss, num=6)
+    plt.yticks(loss_ticks, [f"{tick:.2f}" for tick in loss_ticks])  # **格式化刻度**
+
     plt.legend()
 
     plt.savefig('../sign-language-translate/test/sign-language.png')
@@ -144,6 +159,7 @@ def modelfit():
 
 
 if __name__ == '__main__':
+    tf.keras.backend.clear_session()
     config = tf.compat.v1.ConfigProto()
     config.gpu_options.allow_growth = True
     gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -171,8 +187,9 @@ if __name__ == '__main__':
     kernel_size = 3
     bestmodelfile = './best_model.keras'
     modelfilename = '../sign-language-translate/test/sign-language.h5'
+    tfjs_target_dir = '../sign-language-translate/test/sign-language'
     pltpng = '../sign-language-translate/test/sign-language.png'
-    npyfilespath = './npyfiles/'
+    npyfilespath = './npyfiles2025/'
     fitlogspath = './logs/fit/'
     # data
     # 初始化字典来存储数据
@@ -187,13 +204,13 @@ if __name__ == '__main__':
     label_map = {i: label for i, label in enumerate(label_data_dict)}
     print(label_map)
     # 保存标签映射到文件
-    with open('../sign-language-translate/test/sign-language-model.pkl', 'wb') as f:
+    with open('../sign-language-translate/test/sign-language.pkl', 'wb') as f:
         pickle.dump(label_map, f)
 
     for label, arr in label_data_dict.items():
         data.extend(arr)
         labels.extend([label] * len(arr))
-        print(f"Label '{label}' corresponds to {arr.shape[0]} rows.")
+        # print(f"Label '{label}' corresponds to {arr.shape[0]} rows.")
     data = np.array(data, dtype=np.float32)
     labels = np.array(labels)
     # 使用Counter来计算每个标签的出现次数
@@ -204,12 +221,9 @@ if __name__ == '__main__':
     # 可选：打印总的标签数量
     print("Total number of samples:", len(labels))
     print("Total number of label:", len(label_counts))
-
     # 标签编码
     encoder = LabelEncoder()
-
     encoded_labels = to_categorical(encoder.fit_transform(labels))
-
     features_train, features_test, labels_train, labels_test = train_test_split(data, encoded_labels, test_size=0.2,
                                                                                 random_state=42)
     # modelcreate()
